@@ -40,8 +40,18 @@
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-ring: var(--ring);
-  --font-display: "Sora", "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "DM Sans", "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
+  /* LatinNums (Arial digits) first — see @font-face below */
+  --font-display: "LatinNums", "Manrope", "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "LatinNums", "DM Sans", "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Digits & math signs always render in Arial, in both EN and KM */
+@font-face {
+  font-family: "LatinNums";
+  src: local("Arial"), local("Helvetica");
+  unicode-range:
+    U+0030-0039, U+002B, U+002D, U+002E, U+002C, U+0025, U+002F, U+003D, U+00D7, U+00F7,
+    U+2212;
 }
 
 :root {
@@ -106,12 +116,17 @@
   }
 
   html[lang="km"] {
-    --font-display: "Kantumruy Pro", "Sora", ui-sans-serif, system-ui, sans-serif;
-    --font-sans: "Kantumruy Pro", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "LatinNums", "Kantumruy Pro", "Manrope", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "LatinNums", "Kantumruy Pro", "DM Sans", ui-sans-serif, system-ui, sans-serif;
   }
 
   html[lang="km"] body {
     line-height: 1.65;
+  }
+
+  /* Khmer placeholders must not inherit Arial from .tabular inputs */
+  html[lang="km"] input::placeholder {
+    font-family: "Kantumruy Pro", sans-serif;
   }
 
   :focus-visible {
@@ -146,7 +161,7 @@
 }
 
 @utility flash-number {
-  font-family: "Kantumruy Pro", var(--font-display);
+  font-family: Arial, Helvetica, sans-serif;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
@@ -156,7 +171,7 @@
 }
 
 @utility tabular {
-  font-family: "Kantumruy Pro", var(--font-sans);
+  font-family: Arial, Helvetica, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -185,6 +200,15 @@
   }
 }
 
+@keyframes lifeline-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .anim-flash {
   animation: flash-in 90ms ease-out;
 }
@@ -193,10 +217,21 @@
   animation: pop 180ms ease-out;
 }
 
+.anim-lifeline {
+  width: 100%;
+  transform-origin: left center;
+  animation: lifeline-fill 5000ms linear forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .anim-flash,
   .anim-pop {
     animation: none;
+  }
+
+  .anim-lifeline {
+    animation: none;
+    transform: scaleX(1);
   }
 }
 

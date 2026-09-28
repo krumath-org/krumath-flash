@@ -5,7 +5,7 @@ export const en = {
 
   "brand.name": "KruMath",
   "brand.flash": "Flash",
-  "tagline": "Watch. Calculate. Answer.",
+  tagline: "Watch. Calculate. Answer.",
 
   "action.start": "Start",
   "action.submit": "Submit",
@@ -19,6 +19,11 @@ export const en = {
   "action.close": "Close",
   "action.tryAgain": "Try again",
   "action.goHome": "Go home",
+  "action.signIn": "Sign in",
+  "action.signOut": "Log out",
+  "action.signingOut": "Signing out…",
+
+  "auth.checking": "Checking your KruMath account…",
 
   "hud.score": "Score",
   "hud.round": "Round {n}",
@@ -35,6 +40,8 @@ export const en = {
   "pause.title": "Paused",
   "pause.hint": "The round will replay from the start.",
 
+  "ready.title": "Ready",
+
   "complete.perfect": "Perfect run",
   "complete.great": "Great run",
   "complete.keepTraining": "Keep training",
@@ -46,6 +53,10 @@ export const en = {
 
   "nav.gameControls": "Game controls",
   "nav.theme": "Theme",
+  "nav.home": "Home",
+  "nav.support": "Support KruMath",
+  "nav.github": "GitHub",
+  "nav.account": "Account",
   "nav.stats": "Stats",
   "nav.settings": "Settings",
   "nav.enterFullscreen": "Enter fullscreen",
@@ -69,7 +80,7 @@ export const en = {
   "settings.gap": "Gap",
   "settings.gapBetween": "Gap between numbers",
   "settings.rounds": "Rounds",
-  "settings.countdown": "Countdown",
+  "settings.countdown": "Ready cue",
   "settings.sound": "Sound",
   "settings.vibration": "Vibration",
   "settings.language": "Language",

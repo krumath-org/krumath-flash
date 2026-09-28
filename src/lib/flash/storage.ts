@@ -54,11 +54,15 @@ export function loadStats(): Stats {
   return safeParse(window.localStorage.getItem(STATS_KEY), emptyStats);
 }
 
-export function saveGame(
-  record: GameRecord,
-  flashMs: number,
-  dailyId?: string,
-): Stats {
+export function persistStats(stats: Stats): void {
+  try {
+    window.localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  } catch {
+    /* storage full or blocked */
+  }
+}
+
+export function saveGame(record: GameRecord, flashMs: number, dailyId?: string): Stats {
   const s = loadStats();
   const next: Stats = {
     ...s,
@@ -69,8 +73,7 @@ export function saveGame(
     bestStreak: Math.max(s.bestStreak, record.bestStreak),
     fastestFlashMs: s.fastestFlashMs === null ? flashMs : Math.min(s.fastestFlashMs, flashMs),
     highestDifficulty:
-      !s.highestDifficulty ||
-      RANK.indexOf(record.difficulty) > RANK.indexOf(s.highestDifficulty)
+      !s.highestDifficulty || RANK.indexOf(record.difficulty) > RANK.indexOf(s.highestDifficulty)
         ? record.difficulty
         : s.highestDifficulty,
     recent: [record, ...s.recent].slice(0, 15),
@@ -88,11 +91,7 @@ export function saveGame(
         }
       : s.daily,
   };
-  try {
-    window.localStorage.setItem(STATS_KEY, JSON.stringify(next));
-  } catch {
-    /* storage full or blocked — game continues */
-  }
+  persistStats(next);
   return next;
 }
 

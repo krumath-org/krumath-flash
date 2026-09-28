@@ -1,27 +1,37 @@
-import type { CookieOptionsWithName } from "@supabase/ssr";
+/**
+ * KruMath shared-session contract.
+ *
+ * IMPORTANT: KruMath's main web app keeps its Supabase session in `localStorage`,
+ * not in `@supabase/ssr` cookies — see
+ * `KruMath/apps/web/src/config/supabase-browser.ts`.
+ *
+ * The only cookie it exposes is the `km_session` presence marker, set by
+ * KruMath's AuthContext on sign-in and cleared on logout. Server-side hard-gate
+ * checks use that marker; the authoritative playable-user check runs in the
+ * browser via `useAuth`.
+ */
 
-const KRUMATH_COOKIE_DOMAIN = ".krumath.com";
+/** Presence marker cookie name — must match KruMath's AuthContext. */
+export const KRUMATH_SESSION_MARKER_COOKIE = "km_session";
 
-/** Cookie options shared with KruMath so auth SSO works on krumath.com. */
-export function getKrumathCookieOptions(
-  hostname = typeof window !== "undefined" ? window.location.hostname : "",
-): Pick<CookieOptionsWithName, "domain" | "path" | "sameSite" | "secure"> {
-  const onKrumath =
-    hostname === "krumath.com" || hostname.endsWith(".krumath.com");
+/**
+ * Shared auth cookie domain for production `krumath.com`.
+ * Returns `undefined` on localhost so cookies stay host-only.
+ */
+export function getKrumathCookieDomain(hostname: string | undefined | null): string | undefined {
+  if (!hostname) return undefined;
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost")) return undefined;
+  if (host === "krumath.com" || host.endsWith(".krumath.com")) return ".krumath.com";
+  return undefined;
+}
 
-  if (onKrumath) {
-    return {
-      domain: KRUMATH_COOKIE_DOMAIN,
-      path: "/",
-      sameSite: "lax",
-      secure: true,
-    };
-  }
-
-  // localhost / preview: leave domain unset so cookies stay on this origin
-  return {
-    path: "/",
-    sameSite: "lax",
-    secure: false,
-  };
+/**
+ * `document.cookie` assignment that clears the KruMath presence marker.
+ * Mirrors KruMath's clear attributes so deletion targets the same cookie.
+ */
+export function clearKrumathSessionMarker(hostname: string | undefined | null): string {
+  const domain = getKrumathCookieDomain(hostname);
+  const domainAttr = domain ? `; Domain=${domain}` : "";
+  return `${KRUMATH_SESSION_MARKER_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${domainAttr}`;
 }

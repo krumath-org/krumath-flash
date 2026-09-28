@@ -18,7 +18,7 @@ export function LocaleToggle({ className = "" }: { className?: string }) {
         className={`inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-lg px-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground active:scale-[0.96] ${className}`}
       >
         <span
-          className="text-[12px] font-semibold leading-none tracking-wide"
+          className="text-[13px] font-semibold leading-none tracking-wide"
           style={isKm ? undefined : { fontFamily: '"Kantumruy Pro", sans-serif' }}
         >
           {isKm ? "EN" : "ខ្មែរ"}

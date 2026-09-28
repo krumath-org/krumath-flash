@@ -276,27 +276,32 @@ export function StatsPanel({ stats, onClose }: { stats: Stats; onClose: () => vo
   const { t, locale } = useLocale();
   const accuracy = stats.questions ? Math.round((stats.correct / stats.questions) * 100) : 0;
   const empty = t("stats.empty");
-  const items: [string, string][] = [
-    [t("stats.gamesPlayed"), String(stats.gamesPlayed)],
-    [t("stats.questions"), String(stats.questions)],
-    [t("stats.correct"), String(stats.correct)],
-    [t("stats.accuracy"), `${accuracy}%`],
-    [t("stats.bestScore"), formatNumber(locale, stats.bestScore)],
-    [t("stats.bestStreak"), String(stats.bestStreak)],
-    [t("stats.fastestFlash"), stats.fastestFlashMs ? `${stats.fastestFlashMs}ms` : empty],
-    [
-      t("stats.highestLevel"),
-      stats.highestDifficulty ? t(difficultyKey(stats.highestDifficulty)) : empty,
-    ],
+  const items: { label: string; value: string; numeric: boolean }[] = [
+    { label: t("stats.gamesPlayed"), value: String(stats.gamesPlayed), numeric: true },
+    { label: t("stats.questions"), value: String(stats.questions), numeric: true },
+    { label: t("stats.correct"), value: String(stats.correct), numeric: true },
+    { label: t("stats.accuracy"), value: `${accuracy}%`, numeric: true },
+    { label: t("stats.bestScore"), value: formatNumber(locale, stats.bestScore), numeric: true },
+    { label: t("stats.bestStreak"), value: String(stats.bestStreak), numeric: true },
+    {
+      label: t("stats.fastestFlash"),
+      value: stats.fastestFlashMs ? `${stats.fastestFlashMs}ms` : empty,
+      numeric: Boolean(stats.fastestFlashMs),
+    },
+    {
+      label: t("stats.highestLevel"),
+      value: stats.highestDifficulty ? t(difficultyKey(stats.highestDifficulty)) : empty,
+      numeric: false,
+    },
   ];
 
   return (
     <Overlay title={t("stats.title")} onClose={onClose}>
       <div className="grid grid-cols-2 gap-3">
-        {items.map(([k, v]) => (
-          <div key={k} className="rounded-xl bg-secondary px-4 py-3">
-            <div className="text-xs text-muted-foreground">{k}</div>
-            <div className="tabular font-display text-xl font-semibold">{v}</div>
+        {items.map(({ label, value, numeric }) => (
+          <div key={label} className="rounded-xl bg-secondary px-4 py-3">
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className={`text-xl font-semibold ${numeric ? "tabular" : ""}`}>{value}</div>
           </div>
         ))}
       </div>

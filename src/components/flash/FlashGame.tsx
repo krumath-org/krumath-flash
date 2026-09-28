@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Maximize2, Minimize2, Settings2 } from "lucide-react";
+import { BarChart3, Github, Heart, Home, Maximize2, Minimize2, Settings2 } from "lucide-react";
 import {
   DIFFICULTIES,
   MODES,
@@ -19,19 +19,24 @@ import {
   type Settings,
 } from "@/lib/flash/engine";
 import { loadSettings, loadStats, saveGame, saveSettings, type Stats } from "@/lib/flash/storage";
+import { hydrateStatsFromCloud, syncStatsToSupabase } from "@/lib/flash/statsSync";
 import { buzz, play, unlockAudio } from "@/lib/flash/sound";
 import { useLocale } from "@/components/i18n/LocaleProvider";
 import { formatNumber, type EnKey } from "@/lib/i18n";
+import {
+  APP_SLUG_PATH,
+  getGithubRepoUrl,
+  getHomeUrl,
+  getPricingUrl,
+  getSignInUrl,
+} from "@/lib/krumathUrls";
+import { useAuth } from "@/lib/useAuth";
 import { Btn, Chip } from "./ui";
 import { SettingsPanel, StatsPanel } from "./panels";
 import { ThemeToggle } from "./ThemeToggle";
 import { LocaleToggle } from "./LocaleToggle";
 import { IconTooltip } from "./IconTooltip";
-
-async function tryOpenStats(open: () => void) {
-  const { requireSignedInForAction } = await import("@/lib/authGate");
-  if (await requireSignedInForAction()) open();
-}
+import { AccountMenu } from "./AccountMenu";
 
 const iconBtnClass =
   "inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground active:scale-[0.96]";
@@ -47,14 +52,7 @@ function difficultyKey(id: Difficulty): EnKey {
   return `difficulty.${id}` as EnKey;
 }
 type Phase =
-  | "idle"
-  | "countdown"
-  | "flashing"
-  | "answering"
-  | "correct"
-  | "incorrect"
-  | "paused"
-  | "complete";
+  "idle" | "countdown" | "flashing" | "answering" | "correct" | "incorrect" | "paused" | "complete";
 
 interface RoundOutcome {
   correct: boolean;
@@ -68,6 +66,7 @@ const OP_LABEL: Record<string, string> = { "+": "+", "-": "−", "×": "×", "÷
 
 export function FlashGame() {
   const { t, locale } = useLocale();
+  const { user, checking, signingOut, signOut } = useAuth(null);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(defaultSettings()));
   const [stats, setStats] = useState<Stats>(() => loadStats());
   const [phase, setPhase] = useState<Phase>("idle");
@@ -88,7 +87,6 @@ export function FlashGame() {
   const [seq, setSeq] = useState<Sequence | null>(null);
   const [stepIndex, setStepIndex] = useState(-1);
   const [visible, setVisible] = useState(false);
-  const [countdownAt, setCountdownAt] = useState(3);
   const [answer, setAnswer] = useState("");
 
   const runId = useRef(0);
@@ -100,6 +98,7 @@ export function FlashGame() {
   const sessionStart = useRef(0);
   const sessionFinished = useRef(false);
   const settingsHydrated = useRef(false);
+  const userIdRef = useRef<string | null>(null);
 
   const playSettings = settings.mode === "daily" ? dailyPlaySettings(settings) : settings;
   const endless = playSettings.mode === "survival" || playSettings.mode === "speed";
@@ -107,6 +106,28 @@ export function FlashGame() {
   const totalRounds = endless ? Infinity : isDaily ? playSettings.rounds : settings.rounds;
   const flashMsForRound =
     playSettings.mode === "speed" ? speedFlashMs(round) : playSettings.flashMs;
+
+  userIdRef.current = user?.id ?? null;
+
+  // Hard gate: redirect when production session is missing / anonymous.
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    if (checking || user) return;
+    window.location.assign(getSignInUrl(APP_SLUG_PATH));
+  }, [checking, user]);
+
+  // Cloud stats hydrate once a playable user is known.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void (async () => {
+      const merged = await hydrateStatsFromCloud(user.id, loadStats());
+      if (!cancelled) setStats(merged);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     settingsHydrated.current = true;
@@ -136,15 +157,9 @@ export function FlashGame() {
 
       let sequence: Sequence;
       try {
-        const rnd = active.mode === "daily"
-          ? mulberry32(todaySeed() + roundIndex * 7919)
-          : Math.random;
-        sequence = generateSequence(
-          active.mode,
-          active.difficulty,
-          active.flashes,
-          rnd,
-        );
+        const rnd =
+          active.mode === "daily" ? mulberry32(todaySeed() + roundIndex * 7919) : Math.random;
+        sequence = generateSequence(active.mode, active.difficulty, active.flashes, rnd);
       } catch {
         setError(true);
         setPhase("idle");
@@ -190,14 +205,14 @@ export function FlashGame() {
 
       if (withCountdown && active.countdown) {
         setPhase("countdown");
-        setCountdownAt(3);
-        [3, 2, 1].forEach((n, i) => {
+        const readyMs = 5000;
+        const beat = readyMs / 3;
+        [0, 1, 2].forEach((i) => {
           schedule(() => {
-            setCountdownAt(n);
-            play(n === 1 ? "go" : "tick", active.sound);
-          }, i * 650);
+            play(i === 2 ? "go" : "tick", active.sound);
+          }, i * beat);
         });
-        schedule(startFlashing, 3 * 650);
+        schedule(startFlashing, readyMs);
       } else {
         startFlashing();
       }
@@ -242,6 +257,8 @@ export function FlashGame() {
         active.mode === "daily" ? dailyKey() : undefined,
       );
       setStats(next);
+      const uid = userIdRef.current;
+      if (uid) void syncStatsToSupabase(uid, next);
     },
     [clearTimers, settings],
   );
@@ -314,14 +331,37 @@ export function FlashGame() {
     }
     setRound(played);
     runRound(played, false);
-  }, [bestStreak, correctCount, endless, finishSession, outcome, round, runRound, score, totalRounds]);
+  }, [
+    bestStreak,
+    correctCount,
+    endless,
+    finishSession,
+    outcome,
+    round,
+    runRound,
+    score,
+    totalRounds,
+  ]);
 
   const pause = useCallback(() => {
-    if (phase !== "flashing" && phase !== "countdown" && phase !== "answering") return;
+    if (
+      phase !== "flashing" &&
+      phase !== "countdown" &&
+      phase !== "answering" &&
+      phase !== "correct" &&
+      phase !== "incorrect"
+    ) {
+      return;
+    }
     clearTimers();
     setVisible(false);
     setPhase("paused");
   }, [clearTimers, phase]);
+
+  const resume = useCallback(() => {
+    if (outcome) next();
+    else runRound(round, true);
+  }, [next, outcome, round, runRound]);
 
   const exit = useCallback(() => {
     clearTimers();
@@ -344,7 +384,15 @@ export function FlashGame() {
     const onKey = (e: KeyboardEvent) => {
       if (showSettings || showStats) return;
       if (e.key === "Escape") {
-        if (phase === "flashing" || phase === "countdown" || phase === "answering") pause();
+        if (
+          phase === "flashing" ||
+          phase === "countdown" ||
+          phase === "answering" ||
+          phase === "correct" ||
+          phase === "incorrect"
+        ) {
+          pause();
+        }
         return;
       }
       if (e.key === "Enter" || e.key === " ") {
@@ -356,13 +404,13 @@ export function FlashGame() {
           next();
         } else if (phase === "paused") {
           e.preventDefault();
-          runRound(round, true);
+          resume();
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [next, pause, phase, round, runRound, showSettings, showStats, startSession]);
+  }, [next, pause, phase, resume, showSettings, showStats, startSession]);
 
   useEffect(() => {
     const sync = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -383,7 +431,17 @@ export function FlashGame() {
 
   const dailyDone = useMemo(() => stats.daily[dailyKey()], [stats.daily]);
 
+  const gatePending = !import.meta.env.DEV && (checking || !user);
+
   /* ---------------- render ---------------- */
+
+  if (gatePending) {
+    return (
+      <main className="relative flex min-h-[100dvh] flex-col items-center justify-center px-5 text-center text-muted-foreground">
+        <p className="text-sm">{t("auth.checking")}</p>
+      </main>
+    );
+  }
 
   return (
     <main className="relative flex min-h-[100dvh] flex-col pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[env(safe-area-inset-bottom)] pt-[calc(env(safe-area-inset-top)+1rem)]">
@@ -391,16 +449,24 @@ export function FlashGame() {
       <header className="flex min-w-0 items-center justify-between gap-3 text-sm text-muted-foreground">
         {playing ? (
           <>
-            <span className="tabular min-w-0 truncate">
+            <span className="min-w-0 truncate">
               {t("hud.score")}{" "}
-              <span className="font-display text-foreground">{formatNumber(locale, score)}</span>
-              {streak > 1 && <span className="ml-2 shrink-0 text-accent">🔥 {streak}</span>}
+              <span className="tabular text-foreground">{formatNumber(locale, score)}</span>
+              {streak > 1 && (
+                <span className="ml-2 shrink-0 text-accent">
+                  🔥 <span className="tabular">{streak}</span>
+                </span>
+              )}
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              <span className="tabular">
-                {endless
-                  ? t("hud.round", { n: round + 1 })
-                  : t("hud.roundOf", { current: round + 1, total: totalRounds })}
+              <span>
+                {endless ? (
+                  t("hud.round", { n: round + 1 })
+                ) : (
+                  <span className="tabular">
+                    {t("hud.roundOf", { current: round + 1, total: totalRounds })}
+                  </span>
+                )}
               </span>
               <nav aria-label={t("nav.theme")} className={`${toolbarClass} hidden sm:flex`}>
                 <LocaleToggle />
@@ -416,12 +482,37 @@ export function FlashGame() {
             <nav aria-label={t("nav.gameControls")} className={toolbarClass}>
               <LocaleToggle />
               <ThemeToggle />
+              <IconTooltip label={t("nav.home")} side="bottom">
+                <a href={getHomeUrl()} aria-label={t("nav.home")} className={iconBtnClass}>
+                  <Home className="size-4" strokeWidth={1.75} aria-hidden />
+                </a>
+              </IconTooltip>
+              <IconTooltip label={t("nav.support")} side="bottom">
+                <a
+                  href={getPricingUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={t("nav.support")}
+                  className={iconBtnClass}
+                >
+                  <Heart className="size-4" strokeWidth={1.75} aria-hidden />
+                </a>
+              </IconTooltip>
+              <IconTooltip label={t("nav.github")} side="bottom">
+                <a
+                  href={getGithubRepoUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={t("nav.github")}
+                  className={iconBtnClass}
+                >
+                  <Github className="size-4" strokeWidth={1.75} aria-hidden />
+                </a>
+              </IconTooltip>
               <IconTooltip label={t("nav.stats")} side="bottom">
                 <button
                   type="button"
-                  onClick={() => {
-                    void tryOpenStats(() => setShowStats(true));
-                  }}
+                  onClick={() => setShowStats(true)}
                   aria-label={t("nav.stats")}
                   className={iconBtnClass}
                 >
@@ -455,6 +546,16 @@ export function FlashGame() {
                   <Settings2 className="size-4" strokeWidth={1.75} aria-hidden />
                 </button>
               </IconTooltip>
+              <AccountMenu
+                user={user}
+                signInHref={getSignInUrl(APP_SLUG_PATH)}
+                onSignOut={signOut}
+                signingOut={signingOut}
+                signInLabel={t("action.signIn")}
+                accountLabel={t("nav.account")}
+                signOutLabel={t("action.signOut")}
+                signingOutLabel={t("action.signingOut")}
+              />
             </nav>
           </>
         )}
@@ -474,7 +575,11 @@ export function FlashGame() {
             <p className="mt-3 text-muted-foreground">{t("tagline")}</p>
 
             <div className="mt-8">
-              <Btn variant="primary" className="w-full py-5 text-4xl! font-bold! leading-none" onClick={startSession}>
+              <Btn
+                variant="primary"
+                className="w-full py-4 text-3xl! font-bold! leading-none"
+                onClick={startSession}
+              >
                 {t("action.start")}
               </Btn>
             </div>
@@ -509,7 +614,9 @@ export function FlashGame() {
                   active={settings.mode === m.id}
                   onClick={() =>
                     setSettings((s) =>
-                      m.id === "daily" ? dailyPlaySettings({ ...s, mode: "daily" }) : { ...s, mode: m.id },
+                      m.id === "daily"
+                        ? dailyPlaySettings({ ...s, mode: "daily" })
+                        : { ...s, mode: m.id },
                     )
                   }
                 >
@@ -530,8 +637,20 @@ export function FlashGame() {
         )}
 
         {phase === "countdown" && (
-          <div key={countdownAt} className="anim-pop flash-number text-muted-foreground">
-            {countdownAt}
+          <div
+            className="anim-pop flex w-full max-w-xs flex-col items-center gap-5"
+            aria-live="polite"
+            aria-label={t("ready.title")}
+          >
+            <div className="font-display text-2xl font-semibold text-muted-foreground sm:text-3xl">
+              {t("ready.title")}
+            </div>
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+              aria-hidden="true"
+            >
+              <div className="anim-lifeline h-full rounded-full bg-primary" />
+            </div>
           </div>
         )}
 
@@ -542,9 +661,13 @@ export function FlashGame() {
           >
             {visible && currentStep && (
               <div key={stepIndex} className="anim-flash flash-number max-w-full">
-                {stepIndex > 0 && currentStep.op && (
-                  <span className="mr-2 text-muted-foreground">{OP_LABEL[currentStep.op]}</span>
-                )}
+                {stepIndex > 0 &&
+                  currentStep.op &&
+                  currentStep.op !== "+" && (
+                    <span className="mr-2 text-muted-foreground">
+                      {OP_LABEL[currentStep.op]}
+                    </span>
+                  )}
                 {currentStep.value}
               </div>
             )}
@@ -553,7 +676,10 @@ export function FlashGame() {
 
         {phase === "answering" && (
           <div className="w-full max-w-sm">
-            <div className="font-display text-4xl font-bold text-muted-foreground/40 sm:text-5xl" aria-hidden="true">
+            <div
+              className="font-display text-4xl font-bold text-muted-foreground/40 sm:text-5xl"
+              aria-hidden="true"
+            >
               ?
             </div>
             <input
@@ -566,7 +692,7 @@ export function FlashGame() {
               autoComplete="off"
               aria-label={t("answer.aria")}
               placeholder={t("answer.placeholder")}
-              className="tabular mt-4 w-full rounded-2xl border border-border bg-surface px-6 py-5 text-center font-display text-4xl font-semibold outline-none focus:border-primary"
+              className="tabular mt-4 w-full rounded-2xl border border-border bg-surface px-6 py-5 text-center text-4xl font-semibold outline-none focus:border-primary"
             />
             <Btn variant="primary" className="mt-3 w-full py-4 text-lg" onClick={submit}>
               {t("action.submit")}
@@ -583,11 +709,11 @@ export function FlashGame() {
             >
               {outcome.correct ? t("feedback.correct") : t("feedback.incorrect")}
             </div>
-            <div className="tabular mt-4 font-display text-5xl font-extrabold sm:text-6xl">
+            <div className="tabular mt-4 text-5xl font-extrabold sm:text-6xl">
               {outcome.expected}
             </div>
             {outcome.correct ? (
-              <div className="mt-2 text-accent">+{outcome.gained}</div>
+              <div className="tabular mt-2 text-accent">+{outcome.gained}</div>
             ) : (
               <div className="mt-2 text-muted-foreground">
                 {t("feedback.yourAnswer", { n: outcome.given })}
@@ -607,11 +733,7 @@ export function FlashGame() {
           <div className="w-full max-w-sm">
             <div className="font-display text-3xl font-semibold">{t("pause.title")}</div>
             <p className="mt-2 text-sm text-muted-foreground">{t("pause.hint")}</p>
-            <Btn
-              variant="primary"
-              className="mt-6 w-full py-4 text-lg"
-              onClick={() => runRound(round, true)}
-            >
+            <Btn variant="primary" className="mt-6 w-full py-4 text-lg" onClick={resume}>
               {t("action.resume")}
             </Btn>
             <Btn variant="quiet" className="mt-2 w-full" onClick={exit}>
@@ -622,7 +744,7 @@ export function FlashGame() {
 
         {phase === "complete" && (
           <div className="anim-pop w-full max-w-sm">
-            <div className="tabular font-display text-5xl font-extrabold sm:text-6xl">
+            <div className="tabular text-5xl font-extrabold sm:text-6xl">
               {formatNumber(locale, score)}
             </div>
             <p className="mt-2 text-muted-foreground">
@@ -632,7 +754,7 @@ export function FlashGame() {
                   ? t("complete.great")
                   : t("complete.keepTraining")}
             </p>
-            <p className="tabular mt-4 text-sm text-muted-foreground">
+            <p className="mt-4 text-sm text-muted-foreground">
               {t("complete.summary", {
                 correct: correctCount,
                 total: round + 1,
@@ -644,12 +766,7 @@ export function FlashGame() {
               {t("action.playAgain")}
             </Btn>
             <div className="mt-3 flex justify-center gap-2 text-sm">
-              <Btn
-                variant="quiet"
-                onClick={() => {
-                  void tryOpenStats(() => setShowStats(true));
-                }}
-              >
+              <Btn variant="quiet" onClick={() => setShowStats(true)}>
                 {t("action.stats")}
               </Btn>
               <Btn variant="quiet" onClick={exit}>
@@ -669,7 +786,8 @@ export function FlashGame() {
                 className={`h-2 w-2 rounded-full ${i <= stepIndex ? "bg-primary" : "bg-muted"}`}
               />
             ))
-          : playing && phase !== "paused" && (
+          : playing &&
+            phase !== "paused" && (
               <Btn variant="quiet" className="min-h-10 px-4 py-2 text-sm" onClick={pause}>
                 {t("action.pause")}
               </Btn>

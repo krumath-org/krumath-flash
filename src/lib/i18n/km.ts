@@ -7,7 +7,7 @@ export const km: Record<EnKey, string> = {
 
   "brand.name": "KruMath",
   "brand.flash": "Flash",
-  "tagline": "មើល គណនា ឆ្លើយ",
+  tagline: "មើល គណនា ឆ្លើយ",
 
   "action.start": "ចាប់ផ្តើម",
   "action.submit": "ដាក់បញ្ជូន",
@@ -21,6 +21,11 @@ export const km: Record<EnKey, string> = {
   "action.close": "បិទ",
   "action.tryAgain": "ព្យាយាមម្ដងទៀត",
   "action.goHome": "ទៅទំព័រដើម",
+  "action.signIn": "ចូលគណនី",
+  "action.signOut": "ចាកចេញ",
+  "action.signingOut": "កំពុងចាកចេញ…",
+
+  "auth.checking": "កំពុងពិនិត្យគណនី KruMath…",
 
   "hud.score": "ពិន្ទុ",
   "hud.round": "ជុំទី {n}",
@@ -37,10 +42,13 @@ export const km: Record<EnKey, string> = {
   "pause.title": "ផ្អាក?",
   "pause.hint": "ជុំនេះនឹងចាប់ផ្ដើមឡើងវិញសាជាថ្មី។",
 
+  "ready.title": "ត្រៀមខ្លួន",
+
   "complete.perfect": "ជុំល្អឥតខ្ចោះ",
   "complete.great": "ជុំល្អ",
   "complete.keepTraining": "បន្តហ្វឹកហាត់",
-  "complete.summary": "{correct} / {total} ត្រឹមត្រូវ · ភាពត្រឹមត្រូវ {accuracy}% · ជាប់ៗគ្នា {streak}",
+  "complete.summary":
+    "{correct} / {total} ត្រឹមត្រូវ · ភាពត្រឹមត្រូវ {accuracy}% · ជាប់ៗគ្នា {streak}",
 
   "error.generic": "មានបញ្ហា។ សូមព្យាយាមម្ដងទៀត។",
   "answer.placeholder": "ចម្លើយ",
@@ -48,6 +56,10 @@ export const km: Record<EnKey, string> = {
 
   "nav.gameControls": "ការគ្រប់គ្រងហ្គេម",
   "nav.theme": "រចនាប័ទ្ម",
+  "nav.home": "ទំព័រដើម",
+  "nav.support": "គាំទ្រ Krumath",
+  "nav.github": "GitHub",
+  "nav.account": "គណនី",
   "nav.stats": "ស្ថិតិ",
   "nav.settings": "ការកំណត់",
   "nav.enterFullscreen": "បើកពេញអេក្រង់",
@@ -71,7 +83,7 @@ export const km: Record<EnKey, string> = {
   "settings.gap": "គម្លាត",
   "settings.gapBetween": "គម្លាតរវាងលេខ",
   "settings.rounds": "ចំនួនជុំ",
-  "settings.countdown": "រាប់ថយក្រោយ",
+  "settings.countdown": "សញ្ញាត្រៀម",
   "settings.sound": "សំឡេង",
   "settings.vibration": "ញ័រ",
   "settings.language": "ភាសា",
